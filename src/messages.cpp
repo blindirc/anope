@@ -62,7 +62,7 @@ void Invite::Run(MessageSource &source, const std::vector<Anope::string> &params
 
 	if (!targ || targ->server != Me || !c || c->FindUser(targ))
 		return;
-	
+
 	FOREACH_MOD(OnInvite, (source.GetUser(), c, targ));
 }
 
@@ -120,14 +120,14 @@ void Join::SJoin(MessageSource &source, const Anope::string &chan, time_t ts, co
 	/* Their TS is newer, don't accept any modes from them */
 	else if (ts > c->creation_time)
 		keep_their_modes = false;
-	
+
 	/* Update the modes for the channel */
 	if (keep_their_modes && !modes.empty())
 		/* If we are syncing, mlock is checked later in Channel::Sync. It is important to not check it here
 		 * so that Channel::SetCorrectModes can correctly detect the presence of channel mode +r.
 		 */
 		c->SetModesInternal(source, modes, ts, !c->syncing);
-	
+
 	for (std::list<SJoinUser>::const_iterator it = users.begin(), it_end = users.end(); it != it_end; ++it)
 	{
 		const ChannelStatus &status = it->first;
@@ -148,7 +148,7 @@ void Join::SJoin(MessageSource &source, const Anope::string &chan, time_t ts, co
 		 * they aren't allowed to have (secureops etc).
 		 */
 		c->SetCorrectModes(u, true);
-		
+
 		FOREACH_MOD(OnJoinChannel, (u, c));
 	}
 
@@ -241,21 +241,25 @@ void MOTD::Run(MessageSource &source, const std::vector<Anope::string> &params)
 	if (s != Me)
 		return;
 
+	User *u = source.GetUser();
+	if (!u)
+		return;
+
 	FILE *f = fopen(Config->GetBlock("serverinfo")->Get<const Anope::string>("motd").c_str(), "r");
 	if (f)
 	{
-		IRCD->SendNumeric(375, source.GetSource(), ":- %s Message of the Day", s->GetName().c_str());
+		IRCD->SendNumeric(375, u->nick.c_str(), ":- %s Message of the Day", s->GetName().c_str());
 		char buf[BUFSIZE];
 		while (fgets(buf, sizeof(buf), f))
 		{
 			buf[strlen(buf) - 1] = 0;
-			IRCD->SendNumeric(372, source.GetSource(), ":- %s", buf);
+			IRCD->SendNumeric(372, u->nick.c_str(), ":- %s", buf);
 		}
 		fclose(f);
-		IRCD->SendNumeric(376, source.GetSource(), ":End of /MOTD command.");
+		IRCD->SendNumeric(376, u->nick.c_str(), ":End of /MOTD command.");
 	}
 	else
-		IRCD->SendNumeric(422, source.GetSource(), ":- MOTD file not found!  Please contact your IRC administrator.");
+		IRCD->SendNumeric(422, u->nick.c_str(), ":- MOTD file not found!  Please contact your IRC administrator.");
 }
 
 void Notice::Run(MessageSource &source, const std::vector<Anope::string> &params)
@@ -366,7 +370,7 @@ void Privmsg::Run(MessageSource &source, const std::vector<Anope::string> &param
 			FOREACH_RESULT(OnBotPrivmsg, MOD_RESULT, (u, bi, message));
 			if (MOD_RESULT == EVENT_STOP)
 				return;
-			
+
 			bi->OnMessage(u, message);
 		}
 	}
@@ -409,22 +413,25 @@ void Stats::Run(MessageSource &source, const std::vector<Anope::string> &params)
 {
 	User *u = source.GetUser();
 
+	if(!u)
+		return;
+
 	switch (params[0][0])
 	{
 		case 'l':
 			if (u->HasMode("OPER"))
 			{
-				IRCD->SendNumeric(211, source.GetSource(), "Server SendBuf SentBytes SentMsgs RecvBuf RecvBytes RecvMsgs ConnTime");
-				IRCD->SendNumeric(211, source.GetSource(), "%s %d %d %d %d %d %d %ld", Config->Uplinks[Anope::CurrentUplink].host.c_str(), UplinkSock->WriteBufferLen(), TotalWritten, -1, UplinkSock->ReadBufferLen(), TotalRead, -1, static_cast<long>(Anope::CurTime - Anope::StartTime));
+				IRCD->SendNumeric(211, u->nick.c_str(), "Server SendBuf SentBytes SentMsgs RecvBuf RecvBytes RecvMsgs ConnTime");
+				IRCD->SendNumeric(211, u->nick.c_str(), "%s %d %d %d %d %d %d %ld", Config->Uplinks[Anope::CurrentUplink].host.c_str(), UplinkSock->WriteBufferLen(), TotalWritten, -1, UplinkSock->ReadBufferLen(), TotalRead, -1, static_cast<long>(Anope::CurTime - Anope::StartTime));
 			}
 
-			IRCD->SendNumeric(219, source.GetSource(), "%c :End of /STATS report.", params[0][0]);
+			IRCD->SendNumeric(219, u->nick.c_str(), "%c :End of /STATS report.", params[0][0]);
 			break;
 		case 'o':
 		case 'O':
 			/* Check whether the user is an operator */
 			if (!u->HasMode("OPER") && Config->GetBlock("options")->Get<bool>("hidestatso"))
-				IRCD->SendNumeric(219, source.GetSource(), "%c :End of /STATS report.", params[0][0]);
+				IRCD->SendNumeric(219, u->nick.c_str(), "%c :End of /STATS report.", params[0][0]);
 			else
 			{
 				for (unsigned i = 0; i < Oper::opers.size(); ++i)
@@ -433,24 +440,24 @@ void Stats::Run(MessageSource &source, const std::vector<Anope::string> &params)
 
 					const NickAlias *na = NickAlias::Find(o->name);
 					if (na)
-						IRCD->SendNumeric(243, source.GetSource(), "O * * %s %s 0", o->name.c_str(), o->ot->GetName().replace_all_cs(" ", "_").c_str());
+						IRCD->SendNumeric(243, u->nick.c_str(), "O * * %s %s 0", o->name.c_str(), o->ot->GetName().replace_all_cs(" ", "_").c_str());
 				}
 
-				IRCD->SendNumeric(219, source.GetSource(), "%c :End of /STATS report.", params[0][0]);
+				IRCD->SendNumeric(219, u->nick.c_str(), "%c :End of /STATS report.", params[0][0]);
 			}
 
 			break;
 		case 'u':
 		{
 			long uptime = static_cast<long>(Anope::CurTime - Anope::StartTime);
-			IRCD->SendNumeric(242, source.GetSource(), ":Services up %d day%s, %02d:%02d:%02d", uptime / 86400, uptime / 86400 == 1 ? "" : "s", (uptime / 3600) % 24, (uptime / 60) % 60, uptime % 60);
-			IRCD->SendNumeric(250, source.GetSource(), ":Current users: %d (%d ops); maximum %d", UserListByNick.size(), OperCount, MaxUserCount);
-			IRCD->SendNumeric(219, source.GetSource(), "%c :End of /STATS report.", params[0][0]);
+			IRCD->SendNumeric(242, u->nick.c_str(), ":Services up %d day%s, %02d:%02d:%02d", uptime / 86400, uptime / 86400 == 1 ? "" : "s", (uptime / 3600) % 24, (uptime / 60) % 60, uptime % 60);
+			IRCD->SendNumeric(250, u->nick.c_str(), ":Current users: %d (%d ops); maximum %d", UserListByNick.size(), OperCount, MaxUserCount);
+			IRCD->SendNumeric(219, u->nick.c_str(), "%c :End of /STATS report.", params[0][0]);
 			break;
 		} /* case 'u' */
 
 		default:
-			IRCD->SendNumeric(219, source.GetSource(), "%c :End of /STATS report.", params[0][0]);
+			IRCD->SendNumeric(219, u->nick.c_str(), "%c :End of /STATS report.", params[0][0]);
 	}
 
 	return;
@@ -485,19 +492,21 @@ void Version::Run(MessageSource &source, const std::vector<Anope::string> &param
 void Whois::Run(MessageSource &source, const std::vector<Anope::string> &params)
 {
 	User *u = User::Find(params[0]);
+	if (!u)
+		return;
 
 	if (u && u->server == Me)
 	{
 		const BotInfo *bi = BotInfo::Find(u->GetUID());
-		IRCD->SendNumeric(311, source.GetSource(), "%s %s %s * :%s", u->nick.c_str(), u->GetIdent().c_str(), u->host.c_str(), u->realname.c_str());
+		IRCD->SendNumeric(311, u->nick.c_str(), "%s %s %s * :%s", u->nick.c_str(), u->GetIdent().c_str(), u->host.c_str(), u->realname.c_str());
 		if (bi)
-			IRCD->SendNumeric(307, source.GetSource(), "%s :is a registered nick", bi->nick.c_str());
-		IRCD->SendNumeric(312, source.GetSource(), "%s %s :%s", u->nick.c_str(), Me->GetName().c_str(), Config->GetBlock("serverinfo")->Get<const Anope::string>("description").c_str());
+			IRCD->SendNumeric(307, u->nick.c_str(), "%s :is a registered nick", bi->nick.c_str());
+		IRCD->SendNumeric(312, u->nick.c_str(), "%s %s :%s", u->nick.c_str(), Me->GetName().c_str(), Config->GetBlock("serverinfo")->Get<const Anope::string>("description").c_str());
 		if (bi)
-			IRCD->SendNumeric(317, source.GetSource(), "%s %ld %ld :seconds idle, signon time", bi->nick.c_str(), static_cast<long>(Anope::CurTime - bi->lastmsg), static_cast<long>(bi->signon));
-		IRCD->SendNumeric(318, source.GetSource(), "%s :End of /WHOIS list.", u->nick.c_str());
+			IRCD->SendNumeric(317, u->nick.c_str(), "%s %ld %ld :seconds idle, signon time", bi->nick.c_str(), static_cast<long>(Anope::CurTime - bi->lastmsg), static_cast<long>(bi->signon));
+		IRCD->SendNumeric(318, u->nick.c_str(), "%s :End of /WHOIS list.", u->nick.c_str());
 	}
 	else
-		IRCD->SendNumeric(401, source.GetSource(), "%s :No such user.", params[0].c_str());
+		IRCD->SendNumeric(401, u->nick.c_str(), "%s :No such user.", params[0].c_str());
 }
 
